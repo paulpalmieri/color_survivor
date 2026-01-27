@@ -18,7 +18,10 @@ Do NOT use placeholder circles or rectangles. Instead, create a distinctive "blo
 
 - Use metaballs/marching squares OR shader-based blob rendering for organic shapes
 - Enemies and player should look like paint splotches, not geometric primitives
-- Colors should be vibrant and distinct (recommend: Magenta/Cyan/Yellow or Red/Green/Blue with high saturation)
+- Colors should be vibrant and distinct: Red/Green/Blue with high saturation
+  - Red: {0.95, 0.2, 0.25} - vibrant warm red
+  - Green: {0.2, 0.85, 0.3} - bright grass green
+  - Blue: {0.25, 0.45, 0.95} - vivid blue
 - When entities cluster, they should visually feel like paint pooling (even if just proximity-based glow)
 - Screen background should be off-white or cream (like canvas/paper)
 - Consider subtle "paint splatter" particles on enemy death
@@ -131,7 +134,7 @@ Or just `main.lua` with clearly separated sections if that's faster.
 
 ## Key Implementation Notes
 
-1. **Color Matching**: Use a simple enum or string ("red", "cyan", "yellow"). Don't overcomplicate.
+1. **Color Matching**: Use a simple enum or string ("red", "green", "blue"). Don't overcomplicate.
 
 2. **Cooldown Feedback**: The color-switch cooldown MUST be visually clear. The player should never be surprised they can't switch.
 
