@@ -6,7 +6,8 @@
       "Bash(git commit:*)",
       "Bash(gh repo create:*)",
       "WebSearch",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(luac:*)"
     ]
   }
 }

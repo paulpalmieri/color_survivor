@@ -17,10 +17,10 @@ WINDOW_HEIGHT = 540  -- 180 * 3
 -- Color palette - saturated, distinct colors
 COLORS = {
     red = {0.95, 0.25, 0.3},
-    cyan = {0.2, 0.85, 0.9},
-    yellow = {0.95, 0.9, 0.2},
+    blue = {0.25, 0.35, 0.95},
+    green = {0.25, 0.85, 0.3},
 }
-COLOR_ORDER = {"red", "cyan", "yellow"}
+COLOR_ORDER = {"red", "blue", "green"}
 BACKGROUND = {0.95, 0.93, 0.88}  -- off-white/cream canvas color
 
 -- Player settings (scaled for 320x180 canvas)
@@ -83,6 +83,8 @@ local enemies = {}
 local projectiles = {}
 local shards = {}
 local particles = {}
+local fxParticles = {}
+local showHitFX = true
 
 -- Projectile pool for performance
 local projectilePool = {}
@@ -137,8 +139,11 @@ local function shakeScreen(amount, duration)
 end
 
 local function screenToGame(sx, sy)
-    local scale = math.min(WINDOW_WIDTH / GAME_WIDTH, WINDOW_HEIGHT / GAME_HEIGHT)
-    return sx / scale, sy / scale
+    local w, h = love.graphics.getDimensions()
+    local scale = math.min(w / GAME_WIDTH, h / GAME_HEIGHT)
+    local offsetX = (w - GAME_WIDTH * scale) / 2
+    local offsetY = (h - GAME_HEIGHT * scale) / 2
+    return (sx - offsetX) / scale, (sy - offsetY) / scale
 end
 
 -- ============================================================================
@@ -706,12 +711,12 @@ local function spawnEnemy(enemyType)
         x, y = -SPAWN_MARGIN, math.random(0, GAME_HEIGHT)
     end
 
-    local colorCounts = {red = 0, cyan = 0, yellow = 0}
+    local colorCounts = {red = 0, blue = 0, green = 0}
     for _, e in ipairs(enemies) do
         colorCounts[e.color] = colorCounts[e.color] + 1
     end
 
-    local minCount = math.min(colorCounts.red, colorCounts.cyan, colorCounts.yellow)
+    local minCount = math.min(colorCounts.red, colorCounts.blue, colorCounts.green)
     local candidates = {}
     for _, c in ipairs(COLOR_ORDER) do
         if colorCounts[c] <= minCount + 2 then
@@ -949,6 +954,64 @@ local function applyUpgrade(choice)
 end
 
 -- ============================================================================
+-- PAINT-MIX FX
+-- ============================================================================
+
+local function spawnPaintMixFX(x, y, bulletColor, enemyColor, bvx, bvy, hitType)
+    local bc = COLORS[bulletColor]
+    local ec = COLORS[enemyColor]
+    local blend = {math.max(bc[1],ec[1]), math.max(bc[2],ec[2]), math.max(bc[3],ec[3])}
+
+    local function addFX(px, py, vx, vy, col, life, radius)
+        fxParticles[#fxParticles+1] = {
+            x=px, y=py, vx=vx, vy=vy, color=col,
+            life=life, maxLife=life, radius=radius, shrink=true,
+        }
+    end
+
+    if hitType == "absorbed" then
+        -- Radial splash
+        -- Bullet color particles (disabled, blend-only mode)
+        -- for _=1, math.random(3,4) do
+        --     local a = math.random()*math.pi*2
+        --     local sp = 40 + math.random()*40
+        --     addFX(x, y, math.cos(a)*sp, math.sin(a)*sp, {bc[1],bc[2],bc[3]}, 0.25, 1.5+math.random())
+        -- end
+        -- Enemy color particles (disabled, blend-only mode)
+        -- for _=1, math.random(3,4) do
+        --     local a = math.random()*math.pi*2
+        --     local sp = 40 + math.random()*40
+        --     addFX(x, y, math.cos(a)*sp, math.sin(a)*sp, {ec[1],ec[2],ec[3]}, 0.25, 1.5+math.random())
+        -- end
+        for _=1, math.random(2,3) do
+            local a = math.random()*math.pi*2
+            local sp = 25 + math.random()*25
+            addFX(x, y, math.cos(a)*sp, math.sin(a)*sp, blend, 0.4, 3+math.random()*1.5)
+        end
+    else -- pierce
+        local dir = math.atan2(bvy, bvx)
+        -- Enemy color particles (disabled, blend-only mode)
+        -- for _=1, math.random(3,4) do
+        --     local a = dir + (math.random()-0.5)*math.pi/3
+        --     local sp = 60 + math.random()*50
+        --     addFX(x, y, math.cos(a)*sp, math.sin(a)*sp, {ec[1],ec[2],ec[3]}, 0.3, 1.5+math.random())
+        -- end
+        -- Bullet color particles (disabled, blend-only mode)
+        -- local perp = dir + math.pi/2
+        -- for _=1, 2 do
+        --     local sign = (_==1) and 1 or -1
+        --     local sp = 30 + math.random()*20
+        --     addFX(x, y, math.cos(perp)*sp*sign, math.sin(perp)*sp*sign, {bc[1],bc[2],bc[3]}, 0.3, 1.5+math.random()*0.5)
+        -- end
+        for _=1, math.random(2,3) do
+            local a = math.random()*math.pi*2
+            local sp = 15 + math.random()*15
+            addFX(x, y, math.cos(a)*sp, math.sin(a)*sp, blend, 0.5, 3+math.random()*1.5)
+        end
+    end
+end
+
+-- ============================================================================
 -- COLLISION SYSTEM
 -- ============================================================================
 
@@ -979,6 +1042,9 @@ local function checkCollisions()
 
                     -- Spawn splatter particles
                     spawnSplatterParticles(p.x, p.y, e.color, 4)
+                    if showHitFX then
+                        spawnPaintMixFX(p.x, p.y, p.color, e.color, p.vx, p.vy, "pierce")
+                    end
 
                     if e.hp <= 0 then
                         spawnDeathParticles(e.x, e.y, e.color, 8)
@@ -998,6 +1064,9 @@ local function checkCollisions()
                     e.pulseAmount = 2
 
                     spawnFizzleParticle(p.x, p.y, p.color)
+                    if showHitFX then
+                        spawnPaintMixFX(p.x, p.y, p.color, e.color, p.vx, p.vy, "absorbed")
+                    end
                     break  -- Bullet is dying, stop checking
                 end
             end
@@ -1028,6 +1097,28 @@ local function updateParticles(dt)
         if p.life <= 0 then
             table.remove(particles, i)
         end
+    end
+end
+
+local function updateFXParticles(dt)
+    for i = #fxParticles, 1, -1 do
+        local p = fxParticles[i]
+        p.life = p.life - dt
+        p.x = p.x + p.vx * dt
+        p.y = p.y + p.vy * dt
+        p.vy = p.vy + 80 * dt
+        if p.life <= 0 then
+            table.remove(fxParticles, i)
+        end
+    end
+end
+
+local function drawFXParticles()
+    for _, p in ipairs(fxParticles) do
+        local alpha = p.life / p.maxLife
+        local r = p.shrink and (p.radius * alpha) or p.radius
+        love.graphics.setColor(p.color[1], p.color[2], p.color[3], alpha)
+        love.graphics.circle("fill", p.x, p.y, r)
     end
 end
 
@@ -1068,8 +1159,8 @@ local function drawBlobs()
     -- Group entities by color
     local entitiesByColor = {
         red = {enemies = {}, projectiles = {}, particles = {}},
-        cyan = {enemies = {}, projectiles = {}, particles = {}},
-        yellow = {enemies = {}, projectiles = {}, particles = {}}
+        blue = {enemies = {}, projectiles = {}, particles = {}},
+        green = {enemies = {}, projectiles = {}, particles = {}}
     }
 
     -- Sort enemies by color
@@ -1253,6 +1344,7 @@ end
 -- ============================================================================
 
 local function drawUI()
+    local winW, winH = love.graphics.getDimensions()
     love.graphics.setFont(font)
 
     -- HP bar - sharp pixel rectangles, 1px border
@@ -1283,38 +1375,39 @@ local function drawUI()
 
     -- Color indicator - sharp box
     love.graphics.setColor(0.1, 0.1, 0.1, 0.9)
-    love.graphics.rectangle("fill", WINDOW_WIDTH - 102, 18, 84, 34)
+    love.graphics.rectangle("fill", winW - 102, 18, 84, 34)
     love.graphics.setColor(0.2, 0.2, 0.2, 0.9)
-    love.graphics.rectangle("fill", WINDOW_WIDTH - 100, 20, 80, 30)
+    love.graphics.rectangle("fill", winW - 100, 20, 80, 30)
 
     love.graphics.setColor(c[1], c[2], c[3], 1)
-    love.graphics.rectangle("fill", WINDOW_WIDTH - 95, 25, 20, 20)
+    love.graphics.rectangle("fill", winW - 95, 25, 20, 20)
 
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print("Q/E", WINDOW_WIDTH - 70, 24)
+    love.graphics.print("Q/E", winW - 70, 24)
 
     -- Tutorial text
     if waveTime < 10 then
         love.graphics.setFont(fontSmall)
         love.graphics.setColor(0, 0, 0, 0.7 * (1 - waveTime / 10))
-        love.graphics.printf("WASD Move | Mouse Aim | LMB Shoot | Q/E Switch Color", 0, WINDOW_HEIGHT - 26, WINDOW_WIDTH, "center")
+        love.graphics.printf("WASD Move | Mouse Aim | LMB Shoot | Q/E Switch Color", 0, winH - 26, winW, "center")
         love.graphics.setFont(font)
     end
 end
 
 local function drawLevelUpScreen()
+    local winW, winH = love.graphics.getDimensions()
     love.graphics.setColor(0, 0, 0, 0.85)
-    love.graphics.rectangle("fill", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
+    love.graphics.rectangle("fill", 0, 0, winW, winH)
 
     love.graphics.setFont(fontLarge)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("LEVEL UP!", 0, 80, WINDOW_WIDTH, "center")
+    love.graphics.printf("LEVEL UP!", 0, 80, winW, "center")
 
     love.graphics.setFont(font)
     love.graphics.setColor(0.7, 0.7, 0.7, 1)
-    love.graphics.printf("Choose an upgrade:", 0, 135, WINDOW_WIDTH, "center")
+    love.graphics.printf("Choose an upgrade:", 0, 135, winW, "center")
 
-    local buttonX = WINDOW_WIDTH / 2 - 150
+    local buttonX = winW / 2 - 150
     for i, choice in ipairs(levelUpChoices) do
         local y = 180 + (i - 1) * 80
         local mx, my = love.mouse.getPosition()
@@ -1341,20 +1434,21 @@ local function drawLevelUpScreen()
 end
 
 local function drawDeathScreen()
+    local winW, winH = love.graphics.getDimensions()
     love.graphics.setColor(0, 0, 0, 0.8)
-    love.graphics.rectangle("fill", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
+    love.graphics.rectangle("fill", 0, 0, winW, winH)
 
     love.graphics.setFont(fontLarge)
     love.graphics.setColor(1, 0.3, 0.3, 1)
-    love.graphics.printf("GAME OVER", 0, 180, WINDOW_WIDTH, "center")
+    love.graphics.printf("GAME OVER", 0, 180, winW, "center")
 
     love.graphics.setFont(font)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("Level " .. player.level, 0, 260, WINDOW_WIDTH, "center")
-    love.graphics.printf("Survived " .. math.floor(waveTime) .. "s", 0, 290, WINDOW_WIDTH, "center")
+    love.graphics.printf("Level " .. player.level, 0, 260, winW, "center")
+    love.graphics.printf("Survived " .. math.floor(waveTime) .. "s", 0, 290, winW, "center")
 
     love.graphics.setColor(0.7, 0.7, 0.7, 1)
-    love.graphics.printf("Press R to Restart", 0, 370, WINDOW_WIDTH, "center")
+    love.graphics.printf("Press R to Restart", 0, 370, winW, "center")
 end
 
 -- ============================================================================
@@ -1366,6 +1460,7 @@ local function resetGame()
     projectiles = {}
     shards = {}
     particles = {}
+    fxParticles = {}
     waveTime = 0
     spawnTimer = 0
     gameTime = 0
@@ -1435,10 +1530,12 @@ function love.update(dt)
         updateEnemies(dt)
         updateShards(dt)
         updateParticles(dt)
+        updateFXParticles(dt)
         checkCollisions()
         updateSpawning(dt)
     elseif gameState == "levelup" then
         updateParticles(dt)
+        updateFXParticles(dt)
     end
 end
 
@@ -1465,6 +1562,9 @@ function love.draw()
     -- Draw all blobs (enemies, projectiles, particles, player)
     drawBlobs()
 
+    -- Draw paint-mix FX particles
+    drawFXParticles()
+
     -- Draw cooldown indicator on player
     drawCooldownIndicator()
 
@@ -1472,17 +1572,14 @@ function love.draw()
 
     love.graphics.setCanvas()
 
-    -- Draw scaled to window (centered)
+    -- Draw scaled to window (centered, letterboxed)
+    local winW, winH = love.graphics.getDimensions()
     love.graphics.setColor(1, 1, 1, 1)
-    local scale = math.min(
-        love.graphics.getWidth() / GAME_WIDTH,
-        love.graphics.getHeight() / GAME_HEIGHT
-    )
+    local scale = math.min(winW / GAME_WIDTH, winH / GAME_HEIGHT)
     love.graphics.draw(gameCanvas,
-        love.graphics.getWidth()/2,
-        love.graphics.getHeight()/2,
+        winW / 2, winH / 2,
         0, scale, scale,
-        GAME_WIDTH/2, GAME_HEIGHT/2
+        GAME_WIDTH / 2, GAME_HEIGHT / 2
     )
 
     drawUI()
@@ -1506,6 +1603,18 @@ function love.keypressed(key)
             setColorDirect(2)
         elseif key == "3" then
             setColorDirect(3)
+        elseif key == "c" then
+            showHitFX = not showHitFX
+        elseif key == "b" then
+            local fs = love.window.getFullscreen()
+            if fs then
+                love.window.setMode(WINDOW_WIDTH, WINDOW_HEIGHT, {borderless = false, resizable = false})
+            else
+                local _, _, flags = love.window.getMode()
+                local dw, dh = love.window.getDesktopDimensions(flags.display)
+                love.window.setMode(dw, dh, {borderless = true, resizable = false, fullscreentype = "desktop"})
+                love.window.setFullscreen(true, "desktop")
+            end
         elseif key == "escape" then
             love.event.quit()
         end
@@ -1528,7 +1637,8 @@ end
 
 function love.mousepressed(x, y, button)
     if gameState == "levelup" and button == 1 then
-        local buttonX = WINDOW_WIDTH / 2 - 150
+        local winW = love.graphics.getWidth()
+        local buttonX = winW / 2 - 150
         for i, choice in ipairs(levelUpChoices) do
             local cy = 180 + (i - 1) * 80
             if x > buttonX and x < buttonX + 300 and y > cy and y < cy + 60 then
