@@ -1045,7 +1045,7 @@ local function updateSpawning(dt)
         spawnTimer = spawnRate
 
         local enemyType = "drifter"
-        if waveTime > 30 and math.random() < 0.3 then
+        if math.random() < 0.3 then
             enemyType = "dasher"
         end
 
@@ -1212,13 +1212,16 @@ local function drawTelegraphLines()
             local alpha = 0.5 * (e.telegraphTimer / 0.5)
             local c = COLORS[e.color]
             love.graphics.setColor(c[1], c[2], c[3], alpha)
-            love.graphics.setLineWidth(1)
-            -- Draw dashed line pixel by pixel
+            love.graphics.setLineWidth(2)
+            -- Draw dashed line pixel by pixel (capped to actual dash distance)
             local dx, dy = e.targetX - e.x, e.targetY - e.y
-            local len = math.sqrt(dx * dx + dy * dy)
+            local fullLen = math.sqrt(dx * dx + dy * dy)
+            if fullLen < 1 then goto continueTelegraph end
+            local dashDist = 200 * 0.3  -- dash speed * dash duration
+            local len = math.min(fullLen, dashDist)
             local dashLen = 4
             local gapLen = 3
-            local stepX, stepY = dx / len, dy / len
+            local stepX, stepY = dx / fullLen, dy / fullLen
             local traveled = 0
             while traveled < len do
                 local segEnd = math.min(traveled + dashLen, len)
@@ -1228,6 +1231,7 @@ local function drawTelegraphLines()
                 )
                 traveled = segEnd + gapLen
             end
+            ::continueTelegraph::
         end
     end
     love.graphics.setLineStyle(prevStyle)
@@ -1316,21 +1320,21 @@ local function drawLevelUpScreen()
         local mx, my = love.mouse.getPosition()
         local hover = mx > buttonX and mx < buttonX + 300 and my > y and my < y + 60
 
-        -- White border, black fill
-        love.graphics.setColor(1, 1, 1, 1)
+        -- Black border, white fill
+        love.graphics.setColor(0, 0, 0, 1)
         love.graphics.rectangle("fill", buttonX - 2, y - 2, 304, 64)
 
         if hover then
-            love.graphics.setColor(0.15, 0.15, 0.15, 1)
+            love.graphics.setColor(0.85, 0.85, 0.85, 1)
         else
-            love.graphics.setColor(0, 0, 0, 1)
+            love.graphics.setColor(1, 1, 1, 1)
         end
         love.graphics.rectangle("fill", buttonX, y, 300, 60)
 
-        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setColor(0, 0, 0, 1)
         love.graphics.printf(i .. ". " .. choice.name, buttonX, y + 8, 300, "center")
         love.graphics.setFont(fontSmall)
-        love.graphics.setColor(0.6, 0.6, 0.6, 1)
+        love.graphics.setColor(0.3, 0.3, 0.3, 1)
         love.graphics.printf(choice.desc, buttonX, y + 34, 300, "center")
         love.graphics.setFont(font)
     end
